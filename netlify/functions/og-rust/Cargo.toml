@@ -5,10 +5,15 @@ edition = "2024"
 description = "The link preview image of a shared puzzle, the Rust twin of og.mts"
 publish = false
 
+[features]
+default = ["mimalloc"]
+mimalloc = ["dep:mimalloc"]
+
 [dependencies]
 base64 = "0.23"
 imagequant = { version = "4.4", default-features = false }
 lambda_runtime = "1.5"
+mimalloc = { version = "0.1", default-features = false, optional = true }
 oicana = { version = "0.10", default-features = false, features = ["packed", "png"] }
 png = "0.18"
 serde = { version = "1", features = ["derive"] }

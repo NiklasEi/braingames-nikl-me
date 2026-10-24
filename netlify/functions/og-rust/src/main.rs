@@ -16,6 +16,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::puzzle_code::{SharedPuzzle, read_code};
 
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 static TEMPLATE_ZIP: &[u8] = include_bytes!("../../../../og/dist/puzzle_card-0.1.0.zip");
 
 static TEMPLATE: Mutex<Option<Template<PackedTemplate>>> = Mutex::new(None);
@@ -151,13 +155,58 @@ fn render(instance: &Instance, code: &str, puzzle: &SharedPuzzle) -> Result<Rend
     let mut timer = Stopwatch::new();
     let mut template = TEMPLATE.lock().unwrap_or_else(|p| p.into_inner());
     let cold = template.is_none();
-    if cold {
+    let template = loaded(&mut template)?;
+    let template_ms = timer.lap();
+
+    let drawn = draw(template, puzzle)?;
+
+    let kb = |bytes: usize| bytes as f64 / 1024.;
+    println!(
+        "og-rust instance={} call={calls} age={}s template={} compile={:.1}ms \
+         export={:.1}ms palette={:.1}ms size={:.1}->{:.1}KB code={code}",
+        instance.id,
+        instance.loaded_at.elapsed().as_secs(),
+        if cold {
+            format!("created in {template_ms:.1}ms")
+        } else {
+            "warm".to_owned()
+        },
+        drawn.compile_ms,
+        drawn.export_ms,
+        drawn.palette_ms,
+        kb(drawn.true_colour_bytes),
+        kb(drawn.png.len()),
+    );
+    Ok(Rendered {
+        png: drawn.png,
+        call: calls,
+        template_ms,
+        compile_ms: drawn.compile_ms,
+        export_ms: drawn.export_ms,
+        palette_ms: drawn.palette_ms,
+    })
+}
+
+fn loaded(
+    template: &mut Option<Template<PackedTemplate>>,
+) -> Result<&mut Template<PackedTemplate>, String> {
+    if template.is_none() {
         *template =
             Some(Template::init(Cursor::new(TEMPLATE_ZIP)).map_err(|error| format!("{error:?}"))?);
     }
-    let template = template.as_mut().expect("created above");
-    let template_ms = timer.lap();
+    Ok(template.as_mut().expect("created above"))
+}
 
+struct Drawn {
+    png: Vec<u8>,
+    true_colour_bytes: usize,
+    compile_ms: f64,
+    export_ms: f64,
+    palette_ms: f64,
+}
+
+fn draw(template: &mut Template<PackedTemplate>, puzzle: &SharedPuzzle) -> Result<Drawn, String> {
+    let mut timer = Stopwatch::new();
     let (name, tagline) = game(puzzle);
     let card = serde_json::json!({ "name": name, "tagline": tagline, "puzzle": puzzle });
     let mut inputs = TemplateInputs::new();
@@ -174,25 +223,9 @@ fn render(instance: &Instance, code: &str, puzzle: &SharedPuzzle) -> Result<Rend
 
     let png = palette(&rendered)?;
     let palette_ms = timer.lap();
-
-    let kb = |bytes: usize| bytes as f64 / 1024.;
-    println!(
-        "og-rust instance={} call={calls} age={}s template={} compile={compile_ms:.1}ms \
-         export={export_ms:.1}ms palette={palette_ms:.1}ms size={:.1}->{:.1}KB code={code}",
-        instance.id,
-        instance.loaded_at.elapsed().as_secs(),
-        if cold {
-            format!("created in {template_ms:.1}ms")
-        } else {
-            "warm".to_owned()
-        },
-        kb(rendered.len()),
-        kb(png.len()),
-    );
-    Ok(Rendered {
+    Ok(Drawn {
         png,
-        call: calls,
-        template_ms,
+        true_colour_bytes: rendered.len(),
         compile_ms,
         export_ms,
         palette_ms,
