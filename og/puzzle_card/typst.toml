@@ -1,0 +1,13 @@
+[package]
+name = "puzzle_card"
+version = "0.1.0"
+entrypoint = "main.typ"
+description = "The link preview of a shared Brain Games puzzle, 1200x630 at 2 pixels per point."
+
+[tool.oicana]
+manifest_version = 1
+
+[[tool.oicana.inputs]]
+type = "json"
+key = "card"
+default = "sample.json"

@@ -1,0 +1,5 @@
+# Apple and Google fetch these to check which app may open braingames.nikl.me links
+/.well-known/apple-app-site-association
+  Content-Type: application/json
+/.well-known/assetlinks.json
+  Content-Type: application/json

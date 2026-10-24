@@ -1,0 +1,13 @@
+{
+  "name": "braingames-nikl-me",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "deno test netlify/shared",
+    "pack-og": "oicana pack og/puzzle_card -o og/dist"
+  },
+  "dependencies": {
+    "@oicana/node": "0.10.0",
+    "sharp": "0.34.5"
+  }
+}

@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "me.nikl.braingames",
+      "sha256_cert_fingerprints": [
+        "REPLACE_WITH_THE_APP_SIGNING_KEY_SHA256_FROM_PLAY_CONSOLE",
+        "91:7B:3C:98:39:B8:EC:C1:D6:E5:BB:4B:0D:DC:BD:AE:B9:74:80:AC:04:C7:1F:37:94:44:49:98:F0:90:2F:EE"
+      ]
+    }
+  }
+]

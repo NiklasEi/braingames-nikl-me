@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["349HFJ69QH.me.nikl.braingames"],
+        "components": [
+          {
+            "/": "/p/*",
+            "comment": "Shared puzzles"
+          }
+        ]
+      }
+    ]
+  }
+}

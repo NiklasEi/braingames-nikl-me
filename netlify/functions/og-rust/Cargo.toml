@@ -1,0 +1,20 @@
+[package]
+name = "og-rust"
+version = "0.1.0"
+edition = "2024"
+description = "The link preview image of a shared puzzle, the Rust twin of og.mts"
+publish = false
+
+[dependencies]
+base64 = "0.23"
+imagequant = { version = "4.4", default-features = false }
+lambda_runtime = "1.5"
+oicana = { version = "0.10", default-features = false, features = ["packed", "png"] }
+png = "0.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[profile.release]
+lto = "thin"
+strip = true
