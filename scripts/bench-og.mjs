@@ -1,9 +1,7 @@
 #!/usr/bin/env node
-// Measures what the two preview image functions cost, cold and warm: /og/<code>.png (Node)
-// and /og-rust/<code>.png (Rust).
+// Measures what the preview image function costs, cold and warm: /og/<code>.png.
 //
-//   node scripts/bench-og.mjs [--site https://braingames.nikl.me] [--burst 8] [--warm 20]
-//                             [--only node|rust] [--verbose]
+//   node scripts/bench-og.mjs [--site https://braingames.nikl.me] [--burst 8] [--warm 20] [--verbose]
 //
 // Every image is cached after its first request, so every request asks for a puzzle nobody
 // asked for before: the script writes random puzzle codes of its own. A code only has to be
@@ -11,7 +9,7 @@
 //
 // Cold: a burst of parallel requests. Lambda runs one request per instance at a time, so most
 // of a burst lands on fresh instances. Warm: one request after the other, which an instance
-// that is already up takes. The functions report their instance and how many requests it has
+// that is already up takes. The function reports its instance and how many requests it has
 // served (`x-og-call`), so each request is sorted by what it really met, not by the phase it
 // was sent in. Instances stay up for a while, so run the script again after 15 minutes or so
 // for more cold starts.
@@ -20,10 +18,6 @@ const args = parseArgs(process.argv.slice(2));
 const site = (args.site ?? "https://braingames.nikl.me").replace(/\/$/, "");
 const burst = Number(args.burst ?? 8);
 const warm = Number(args.warm ?? 20);
-const functions = [
-  { name: "node", path: (code) => `/og/${code}.png` },
-  { name: "rust", path: (code) => `/og-rust/${code}.png` },
-].filter((fn) => !args.only || fn.name === args.only);
 
 function parseArgs(argv) {
   const parsed = {};
@@ -103,10 +97,9 @@ function checksum(bytes) {
 // ---------------------------------------------------------------------------------------------
 // Requests
 
-async function request(fn, code) {
-  const url = site + fn.path(code);
+async function request(code) {
   const start = performance.now();
-  const response = await fetch(url, { headers: { "cache-control": "no-cache" } });
+  const response = await fetch(`${site}/og/${code}.png`, { headers: { "cache-control": "no-cache" } });
   const firstByte = performance.now() - start;
   const body = await response.arrayBuffer();
   const total = performance.now() - start;
@@ -118,7 +111,6 @@ async function request(fn, code) {
       .map(([, step, ms]) => [step, Number(ms)]),
   );
   const result = {
-    fn: fn.name,
     code,
     status: response.status,
     bytes: body.byteLength,
@@ -126,15 +118,14 @@ async function request(fn, code) {
     firstByte,
     instance: response.headers.get("x-og-instance"),
     call: Number(response.headers.get("x-og-call") ?? NaN),
-    boot: response.headers.has("x-og-boot") ? Number(response.headers.get("x-og-boot")) : undefined,
     cache: response.headers.get("cache-status") ?? "",
     steps,
     render: Object.values(steps).length ? Object.values(steps).reduce((sum, ms) => sum + ms, 0) : NaN,
   };
   if (args.verbose) {
     console.log(
-      `${result.fn.padEnd(4)} ${result.status} call=${String(result.call).padEnd(3)} ` +
-        `instance=${result.instance} total=${total.toFixed(0)}ms render=${ms1(result.render)} ` +
+      `${result.status} call=${String(result.call).padEnd(3)} instance=${result.instance} ` +
+        `total=${total.toFixed(0)}ms render=${ms1(result.render)} ` +
         `${Object.entries(steps).map(([s, ms]) => `${s}=${ms}`).join(" ")} ${result.cache}`,
     );
   }
@@ -166,74 +157,60 @@ const ms = (value) => (Number.isFinite(value) ? `${value.toFixed(0)} ms` : "-");
 const ms1 = (value) => (Number.isFinite(value) ? `${value.toFixed(1)} ms` : "-");
 
 function summarise(results) {
+  const failed = results.filter((result) => result.status !== 200);
+  const ok = results.filter((result) => result.status === 200);
+  const cached = ok.filter((result) => /hit/i.test(result.cache) && !/fwd=miss/i.test(result.cache));
+  const fresh = ok.filter((result) => !cached.includes(result));
+  const cold = fresh.filter((result) => result.call === 1);
+  const warmed = fresh.filter((result) => result.call > 1);
+  const unknown = fresh.filter((result) => !Number.isFinite(result.call));
+
+  if (failed.length) {
+    console.log(`${failed.length} requests failed (${[...new Set(failed.map((r) => r.status))].join(", ")})`);
+  }
+  if (cached.length) {
+    console.log(`${cached.length} answers came from the cache and are left out`);
+  }
+  if (unknown.length) {
+    console.log(`${unknown.length} answers without x-og-call, is the latest deploy live?`);
+  }
+
+  const step = (group, name) => median(group.map((result) => result.steps[name]).filter(Number.isFinite));
   const rows = [];
-  for (const fn of functions) {
-    const mine = results.filter((result) => result.fn === fn.name);
-    const failed = mine.filter((result) => result.status !== 200);
-    const ok = mine.filter((result) => result.status === 200);
-    const cached = ok.filter((result) => /hit/i.test(result.cache) && !/fwd=miss/i.test(result.cache));
-    const fresh = ok.filter((result) => !cached.includes(result));
-    const cold = fresh.filter((result) => result.call === 1);
-    const warmed = fresh.filter((result) => result.call > 1);
-    const unknown = fresh.filter((result) => !Number.isFinite(result.call));
-    const step = (group, name) => median(group.map((result) => result.steps[name]).filter(Number.isFinite));
-    for (const [kind, group] of [["cold", cold], ["warm", warmed], ["unknown", unknown]]) {
-      if (group.length === 0) continue;
-      rows.push({
-        function: fn.name,
-        kind,
-        n: group.length,
-        "total (median)": ms(median(group.map((result) => result.total))),
-        "first byte": ms(median(group.map((result) => result.firstByte))),
-        render: ms1(median(group.map((result) => result.render).filter(Number.isFinite))),
-        template: ms1(step(group, "template")),
-        compile: ms1(step(group, "compile")),
-        export: ms1(step(group, "export")),
-        palette: ms1(step(group, "palette")),
-        "node boot": ms1(median(group.map((result) => result.boot).filter(Number.isFinite))),
-      });
-    }
-    if (failed.length) {
-      console.log(`${fn.name}: ${failed.length} requests failed (${[...new Set(failed.map((r) => r.status))].join(", ")})`);
-    }
-    if (cached.length) {
-      console.log(`${fn.name}: ${cached.length} answers came from the cache and are left out`);
-    }
-    if (unknown.length) {
-      console.log(`${fn.name}: ${unknown.length} answers without x-og-call, is the latest deploy live?`);
-    }
+  for (const [kind, group] of [["cold", cold], ["warm", warmed], ["unknown", unknown]]) {
+    if (group.length === 0) continue;
+    rows.push({
+      kind,
+      n: group.length,
+      "total (median)": ms(median(group.map((result) => result.total))),
+      "first byte": ms(median(group.map((result) => result.firstByte))),
+      render: ms1(median(group.map((result) => result.render).filter(Number.isFinite))),
+      template: ms1(step(group, "template")),
+      compile: ms1(step(group, "compile")),
+      export: ms1(step(group, "export")),
+      palette: ms1(step(group, "palette")),
+    });
   }
   console.table(rows);
 
-  console.log("\nCold start cost (median total cold minus median total warm):");
-  for (const fn of functions) {
-    const fresh = results.filter((result) => result.fn === fn.name && result.status === 200);
-    const cold = median(fresh.filter((result) => result.call === 1).map((result) => result.total));
-    const warmTotal = median(fresh.filter((result) => result.call > 1).map((result) => result.total));
-    const instances = new Set(fresh.map((result) => result.instance).filter(Boolean)).size;
-    console.log(`  ${fn.name.padEnd(4)} ${ms(cold - warmTotal).padStart(8)}   (${instances} instances seen)`);
-  }
+  const coldTotal = median(cold.map((result) => result.total));
+  const warmTotal = median(warmed.map((result) => result.total));
+  const instances = new Set(fresh.map((result) => result.instance).filter(Boolean)).size;
+  console.log(`\nCold start cost (median total cold minus median total warm): ${ms(coldTotal - warmTotal)}`);
+  console.log(`${instances} instances seen`);
 }
 
 // ---------------------------------------------------------------------------------------------
 
 async function main() {
-  console.log(`Measuring ${site}: bursts of ${burst} parallel requests, then ${warm} in a row\n`);
+  console.log(`Measuring ${site}/og/: a burst of ${burst} parallel requests, then ${warm} in a row\n`);
   const network = await baseline();
   console.log(`Network round trip for a static file: ${ms(network)}\n`);
 
-  const results = [];
-  for (const fn of functions) {
-    console.log(`${fn.name}: burst`);
-    results.push(...(await Promise.all(Array.from({ length: burst }, () => request(fn, randomCode())))));
+  const results = await Promise.all(Array.from({ length: burst }, () => request(randomCode())));
+  for (let i = 0; i < warm; i++) {
+    results.push(await request(randomCode()));
   }
-  for (const fn of functions) {
-    console.log(`${fn.name}: one after the other`);
-    for (let i = 0; i < warm; i++) {
-      results.push(await request(fn, randomCode()));
-    }
-  }
-  console.log();
   summarise(results);
 }
 

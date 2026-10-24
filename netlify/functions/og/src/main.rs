@@ -59,7 +59,7 @@ struct Rendered {
     palette_ms: f64,
 }
 
-/// Shows in the function log how often Netlify reuses an instance, like the line of `og.mts`
+/// Shows in the function log how often Netlify reuses an instance
 struct Instance {
     id: String,
     loaded_at: Instant,
@@ -109,7 +109,6 @@ fn handle(instance: &Instance, request: &Request) -> Response {
                     "netlify-cdn-cache-control",
                     "public, durable, max-age=31536000, immutable".into(),
                 ),
-                ("x-og-renderer", "rust".into()),
                 ("x-og-instance", instance.id.clone()),
                 ("x-og-call", rendered.call.to_string()),
                 (
@@ -127,7 +126,7 @@ fn handle(instance: &Instance, request: &Request) -> Response {
             is_base64_encoded: true,
         },
         Err(error) => {
-            eprintln!("og-rust could not render {code}: {error}");
+            eprintln!("og could not render {code}: {error}");
             text(500, "Could not render the puzzle")
         }
     }
@@ -162,7 +161,7 @@ fn render(instance: &Instance, code: &str, puzzle: &SharedPuzzle) -> Result<Rend
 
     let kb = |bytes: usize| bytes as f64 / 1024.;
     println!(
-        "og-rust instance={} call={calls} age={}s template={} compile={:.1}ms \
+        "og instance={} call={calls} age={}s template={} compile={:.1}ms \
          export={:.1}ms palette={:.1}ms size={:.1}->{:.1}KB code={code}",
         instance.id,
         instance.loaded_at.elapsed().as_secs(),
@@ -233,9 +232,9 @@ fn draw(template: &mut Template<PackedTemplate>, puzzle: &SharedPuzzle) -> Resul
 }
 
 /// Typst writes true colour PNGs. The card is flat colours and some smoothed edges, which fit
-/// a palette, and that takes the image from about 30 to about 12 KB at no visible cost. Done
-/// with libimagequant and the settings `og.mts` hands sharp, which uses the same library: up to
-/// quality 90, speed 4, no dithering.
+/// a palette, and that takes the image from about 30 to about 10 KB at no visible cost. Worth
+/// it, because the image is rendered once and then served from the cache many times. Done with
+/// libimagequant: up to quality 90, speed 4, and no dithering, which flat colours do not need.
 fn palette(true_colour: &[u8]) -> Result<Vec<u8>, String> {
     let mut decoder = png::Decoder::new(Cursor::new(true_colour));
     decoder.set_transformations(png::Transformations::EXPAND);
@@ -319,7 +318,7 @@ mod tests {
 
     fn request(code: &str) -> Request {
         Request {
-            path: "/.netlify/functions/og-rust".into(),
+            path: "/.netlify/functions/og".into(),
             query_string_parameters: Some(HashMap::from([("code".into(), format!("{code}.png"))])),
         }
     }

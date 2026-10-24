@@ -1,12 +1,7 @@
 [build]
 publish = "public"
 
-[functions]
-node_bundler = "esbuild"
-external_node_modules = ["@oicana/node", "sharp"]
-included_files = ["og/dist/*.zip"]
-
 [[redirects]]
-from = "/og-rust/*"
-to = "/.netlify/functions/og-rust?code=:splat"
+from = "/og/*"
+to = "/.netlify/functions/og?code=:splat"
 status = 200

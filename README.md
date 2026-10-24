@@ -11,8 +11,7 @@ app.
 | Path | Served by | What it is |
 |---|---|---|
 | `/p/<code>` | `netlify/edge-functions/puzzle.ts` | Page with the puzzle, store links and link preview tags |
-| `/og/<code>.png` | `netlify/functions/og.mts` | Link preview image, rendered from `og/puzzle_card` with Oicana |
-| `/og-rust/<code>.png` | `netlify/functions/og-rust` | The same image from a Rust function, to compare the two |
+| `/og/<code>.png` | `netlify/functions/og` (Rust) | Link preview image, rendered from `og/puzzle_card` with Oicana |
 | `/.well-known/assetlinks.json` | static | Lets the Android app open `/p/` links |
 | `/.well-known/apple-app-site-association` | static | Lets the iOS app open `/p/` links |
 
@@ -20,10 +19,12 @@ A code always reads the same, so both functions answer with Netlify's durable ca
 first request for a code renders the page or image, every later one is served from the cache
 until the next deploy.
 
-`netlify/shared/puzzle_code.ts` reads the codes. The app writes them, in
-`brain_games_lib/src/puzzle/code.rs`, and the two have to agree for as long as links are out
-there. `netlify/shared/fixtures.json` holds codes the app wrote and what they read back as.
-After a change to the format on the app's side, regenerate it from the app's repository:
+The codes are read twice: by `netlify/shared/puzzle_code.ts` for the page and by
+`netlify/functions/og/src/puzzle_code.rs` for the image. The app writes them, in
+`brain_games_lib/src/puzzle/code.rs`, and all three have to agree for as long as links are out
+there. `netlify/shared/fixtures.json` holds codes the app wrote and what they read back as, and
+the tests of both readers check against it. After a change to the format on the app's side,
+regenerate it from the app's repository:
 
 ```sh
 cargo run --example share_link -p brain_games_lib -- --fixtures > ../braingames-nikl-me/netlify/shared/fixtures.json
@@ -32,45 +33,53 @@ cargo run --example share_link -p brain_games_lib -- --fixtures > ../braingames-
 ## Working on it
 
 ```sh
-npm install
-npm test            # deno test netlify/shared
+npm test                                   # deno test netlify/shared
+(cd netlify/functions/og && cargo test)    # decodes every fixture and renders it
 ```
 
 The preview image is an Oicana template. Compile it on its own with
 `oicana compile og/puzzle_card -f png`, and pack it after a change with `npm run pack-og`. The
-packed zip in `og/dist` is what the function loads.
+packed zip in `og/dist` is compiled into the function, so pack before a deploy that changes
+the template.
 
-## Node or Rust
+## The preview image function
 
-The link previews point at the Node function. `netlify/functions/og-rust` renders the same
-cards with Oicana's Rust crate, step for step like `og.mts`: same template, same palette
-compression (libimagequant, which sharp uses too), same cache headers and the same log line,
-prefixed `og-rust` instead of `og`. To compare them:
-
-```sh
-npm run bench-og                      # 8 parallel requests per function, then 20 in a row
-npm run bench-og -- --burst 16 --warm 40 --verbose
-```
-
-It asks for random puzzles nobody asked for before, so the cache never answers. A burst
-lands mostly on new instances, requests one after the other on warm ones. Both functions say
-which instance answered and how many requests it has served (`x-og-instance`, `x-og-call`)
-and how long each step took (`server-timing`), so the script sorts every answer into cold or
-warm by what it met and prints the medians side by side. Instances stay up for a while after
-a run, so give it 15 minutes or more before the next one for fresh cold starts.
+`netlify/functions/og` is a Rust function: Oicana's Rust crate renders the card, libimagequant
+turns it into a palette PNG of about 10 KB. It started out next to a Node function doing the
+same with `@oicana/node` and sharp. Both rendered warm in about the same time, the work being
+the same native code either way, but the Rust function started about 0.8 s faster cold, and
+most renders are cold: each image is rendered once and then cached.
 
 Netlify builds Rust functions only with `NETLIFY_EXPERIMENTAL_BUILD_RUST_SOURCE=true` set in
 the site's environment variables (Site configuration > Environment variables). Setting it in
 `netlify.toml` does not work: the bundler reads it before that file applies, and quietly
-leaves the function out. It compiles the function for `x86_64-unknown-linux-musl` on every
-deploy, which takes a few minutes. The template is compiled into
-the binary, so run `npm run pack-og` before a deploy that changes it, as for Node.
+leaves the function out, which leaves `/og/` without an image. Netlify compiles the function
+for `x86_64-unknown-linux-musl` on every deploy, which adds a minute or two. A classic
+function like this one only answers under `/.netlify/functions/`, so a rewrite in
+`netlify.toml` hands it the code from `/og/<code>.png`.
+
+`.cargo/config.toml` builds the little C in it (mimalloc, and some assembly in `psm`) with the
+system gcc, so the build image needs no musl cross compiler. mimalloc replaces musl's
+allocator, which is slow under the many small allocations Typst makes.
 
 ```sh
-(cd netlify/functions/og-rust && cargo test)   # decodes every fixture and renders it
-# Builds what Netlify would deploy into .netlify/functions/, Rust function included
+# Builds what Netlify would deploy into .netlify/functions/
 NETLIFY_EXPERIMENTAL_BUILD_RUST_SOURCE=true npx netlify build --offline
 ```
+
+To measure the function as deployed:
+
+```sh
+npm run bench-og                          # 8 parallel requests, then 20 in a row
+npm run bench-og -- --burst 16 --warm 40 --verbose
+```
+
+It asks for random puzzles nobody asked for before, so the cache never answers. A burst
+lands mostly on new instances, requests one after the other on warm ones. The function says
+which instance answered and how many requests it has served (`x-og-instance`, `x-og-call`) and
+how long each step took (`server-timing`), so the script sorts every answer into cold or warm
+by what it met. Instances stay up for a while after a run, so give it 15 minutes or more
+before the next one for fresh cold starts.
 
 libimagequant is GPL-3.0. That is fine for a function only Netlify runs, but keep it in mind
 before shipping that code anywhere else.

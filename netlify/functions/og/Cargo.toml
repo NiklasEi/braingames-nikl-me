@@ -1,8 +1,8 @@
 [package]
-name = "og-rust"
+name = "og"
 version = "0.1.0"
 edition = "2024"
-description = "The link preview image of a shared puzzle, the Rust twin of og.mts"
+description = "The link preview image of a shared puzzle"
 publish = false
 
 [features]

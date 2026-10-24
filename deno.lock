@@ -14,13 +14,5 @@
     "@std/internal@1.0.14": {
       "integrity": "291516b3d4c35024d6ffbc0a9df5bf4c64116e05b50012cf846710152d2ffdf7"
     }
-  },
-  "workspace": {
-    "packageJson": {
-      "dependencies": [
-        "npm:@oicana/node@0.10.0",
-        "npm:sharp@0.34.5"
-      ]
-    }
   }
 }
