@@ -45,13 +45,19 @@ packed zip in `og/dist` is what the function loads.
 The link previews point at the Node function. `netlify/functions/og-rust` renders the same
 cards with Oicana's Rust crate, step for step like `og.mts`: same template, same palette
 compression (libimagequant, which sharp uses too), same cache headers and the same log line,
-prefixed `og-rust` instead of `og`. Compare the two in the function logs, or time a request
-for a code neither has rendered yet:
+prefixed `og-rust` instead of `og`. To compare them:
 
 ```sh
-curl -so /dev/null -w '%{time_total}\n' https://braingames.nikl.me/og/<code>.png
-curl -so /dev/null -w '%{time_total}\n' https://braingames.nikl.me/og-rust/<code>.png
+npm run bench-og                      # 8 parallel requests per function, then 20 in a row
+npm run bench-og -- --burst 16 --warm 40 --verbose
 ```
+
+It asks for random puzzles nobody asked for before, so the cache never answers. A burst
+lands mostly on new instances, requests one after the other on warm ones. Both functions say
+which instance answered and how many requests it has served (`x-og-instance`, `x-og-call`)
+and how long each step took (`server-timing`), so the script sorts every answer into cold or
+warm by what it met and prints the medians side by side. Instances stay up for a while after
+a run, so give it 15 minutes or more before the next one for fresh cold starts.
 
 Netlify builds Rust functions only with `NETLIFY_EXPERIMENTAL_BUILD_RUST_SOURCE=true` set in
 the site's environment variables (Site configuration > Environment variables). Setting it in

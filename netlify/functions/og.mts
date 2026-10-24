@@ -24,6 +24,8 @@ function puzzleCard(): Template {
 // carries its id, and a call count above 1 means the module, and with it the template, stayed warm
 const instance = crypto.randomUUID().slice(0, 8);
 const loadedAt = Date.now();
+// Time from the process starting until this module was ready, the native addons included
+const bootMs = process.uptime() * 1000;
 let calls = 0;
 
 /** Each lap returns the milliseconds since the previous one */
@@ -41,6 +43,10 @@ function stopwatch(): { lap(): number } {
 
 function kb(bytes: number): string {
   return (bytes / 1024).toFixed(1);
+}
+
+function serverTiming(steps: Record<string, number>): string {
+  return Object.entries(steps).map(([step, ms]) => `${step};dur=${ms.toFixed(1)}`).join(", ");
 }
 
 export default async (request: Request): Promise<Response> => {
@@ -94,6 +100,12 @@ export default async (request: Request): Promise<Response> => {
       "content-type": "image/png",
       "cache-control": "public, max-age=31536000, immutable",
       "netlify-cdn-cache-control": "public, durable, max-age=31536000, immutable",
+      // For scripts/bench-og.mjs
+      "x-og-renderer": "node",
+      "x-og-instance": instance,
+      "x-og-call": String(calls),
+      "x-og-boot": bootMs.toFixed(1),
+      "server-timing": serverTiming({ template: templateMs, compile: compileMs, export: exportMs, palette: paletteMs }),
     },
   });
 };

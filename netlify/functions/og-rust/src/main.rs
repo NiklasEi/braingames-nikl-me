@@ -40,9 +40,19 @@ struct Request {
 #[serde(rename_all = "camelCase")]
 struct Response {
     status_code: u16,
-    headers: HashMap<&'static str, &'static str>,
+    headers: HashMap<&'static str, String>,
     body: String,
     is_base64_encoded: bool,
+}
+
+/// One render, as the response headers report it for scripts/bench-og.mjs
+struct Rendered {
+    png: Vec<u8>,
+    call: u64,
+    template_ms: f64,
+    compile_ms: f64,
+    export_ms: f64,
+    palette_ms: f64,
 }
 
 /// Shows in the function log how often Netlify reuses an instance, like the line of `og.mts`
@@ -86,42 +96,53 @@ fn handle(instance: &Instance, request: &Request) -> Response {
         Err(_) => return not_found(),
     };
     match render(instance, code, &puzzle) {
-        Ok(png) => Response {
+        Ok(rendered) => Response {
             status_code: 200,
             headers: HashMap::from([
-                ("content-type", "image/png"),
-                ("cache-control", "public, max-age=31536000, immutable"),
+                ("content-type", "image/png".into()),
+                ("cache-control", "public, max-age=31536000, immutable".into()),
                 (
                     "netlify-cdn-cache-control",
-                    "public, durable, max-age=31536000, immutable",
+                    "public, durable, max-age=31536000, immutable".into(),
                 ),
-                ("x-og-renderer", "rust"),
+                ("x-og-renderer", "rust".into()),
+                ("x-og-instance", instance.id.clone()),
+                ("x-og-call", rendered.call.to_string()),
+                (
+                    "server-timing",
+                    format!(
+                        "template;dur={:.1}, compile;dur={:.1}, export;dur={:.1}, palette;dur={:.1}",
+                        rendered.template_ms,
+                        rendered.compile_ms,
+                        rendered.export_ms,
+                        rendered.palette_ms
+                    ),
+                ),
             ]),
-            body: BASE64.encode(png),
+            body: BASE64.encode(rendered.png),
             is_base64_encoded: true,
         },
         Err(error) => {
             eprintln!("og-rust could not render {code}: {error}");
-            Response {
-                status_code: 500,
-                headers: HashMap::from([("content-type", "text/plain")]),
-                body: "Could not render the puzzle".into(),
-                is_base64_encoded: false,
-            }
+            text(500, "Could not render the puzzle")
         }
     }
 }
 
 fn not_found() -> Response {
+    text(404, "Not a puzzle")
+}
+
+fn text(status_code: u16, body: &str) -> Response {
     Response {
-        status_code: 404,
-        headers: HashMap::from([("content-type", "text/plain")]),
-        body: "Not a puzzle".into(),
+        status_code,
+        headers: HashMap::from([("content-type", "text/plain".into())]),
+        body: body.into(),
         is_base64_encoded: false,
     }
 }
 
-fn render(instance: &Instance, code: &str, puzzle: &SharedPuzzle) -> Result<Vec<u8>, String> {
+fn render(instance: &Instance, code: &str, puzzle: &SharedPuzzle) -> Result<Rendered, String> {
     let calls = {
         let mut calls = instance.calls.lock().unwrap_or_else(|p| p.into_inner());
         *calls += 1;
@@ -168,7 +189,14 @@ fn render(instance: &Instance, code: &str, puzzle: &SharedPuzzle) -> Result<Vec<
         kb(rendered.len()),
         kb(png.len()),
     );
-    Ok(png)
+    Ok(Rendered {
+        png,
+        call: calls,
+        template_ms,
+        compile_ms,
+        export_ms,
+        palette_ms,
+    })
 }
 
 /// Typst writes true colour PNGs. The card is flat colours and some smoothed edges, which fit

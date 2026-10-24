@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "deno test netlify/shared",
-    "pack-og": "oicana pack og/puzzle_card -o og/dist"
+    "pack-og": "oicana pack og/puzzle_card -o og/dist",
+    "bench-og": "node scripts/bench-og.mjs"
   },
   "dependencies": {
     "@oicana/node": "0.10.0",
