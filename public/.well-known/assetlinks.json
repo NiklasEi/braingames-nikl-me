@@ -5,7 +5,7 @@
       "namespace": "android_app",
       "package_name": "me.nikl.braingames",
       "sha256_cert_fingerprints": [
-        "REPLACE_WITH_THE_APP_SIGNING_KEY_SHA256_FROM_PLAY_CONSOLE",
+        "EE:43:2A:03:C7:37:2D:A5:D1:33:C0:BC:34:74:EE:43:3F:7C:37:7B:7B:46:98:CC:11:15:7D:08:EB:8A:05:96",
         "91:7B:3C:98:39:B8:EC:C1:D6:E5:BB:4B:0D:DC:BD:AE:B9:74:80:AC:04:C7:1F:37:94:44:49:98:F0:90:2F:EE"
       ]
     }
