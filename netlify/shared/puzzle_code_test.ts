@@ -30,6 +30,14 @@ Deno.test("a version the app has not written yet asks for an update", () => {
   assertEquals(error.needsNewerApp, true);
 });
 
+Deno.test("the extended header asks for an update", () => {
+  for (const header of [0xf2, 0x1f]) {
+    const bytes = [header, 8];
+    const error = assertThrows(() => readCode(encode([...bytes, checksum(bytes)])), CodeError);
+    assertEquals(error.needsNewerApp, true, header.toString(16));
+  }
+});
+
 function checksum(bytes: number[]): number {
   let hash = 0x811c9dc5;
   for (const byte of bytes) {

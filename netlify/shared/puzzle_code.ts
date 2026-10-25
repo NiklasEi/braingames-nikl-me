@@ -3,7 +3,8 @@
 // The app writes them, in brain_games_lib/src/puzzle/code.rs, and this follows that file step
 // by step. A code is base64url without padding, of: one header byte (format version in the
 // high nibble, game in the low one), the puzzle's definition packed into bits, and a checksum
-// byte. `fixtures.json` holds codes the app wrote together with what they have to read back
+// byte. 15 in either nibble is held back for a longer header that no app writes yet, so it
+// reads as a code from a newer app. `fixtures.json` holds codes the app wrote together with what they have to read back
 // as; regenerate it with `cargo run --example share_link -p brain_games_lib -- --fixtures`.
 
 export type Game = "three_in_a_row" | "kings" | "aquarium";
