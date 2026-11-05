@@ -17,6 +17,8 @@
 #let terra = rgb("#d4834a")
 #let sage = rgb("#93a373")
 #let line-colour = rgb("#3b3229")
+#let surface = rgb("#26201b")
+#let shaded-box = rgb("#332b24")
 
 #set page(width: 600pt, height: 315pt, margin: 0pt, fill: bg)
 #set text(font: "JetBrains Mono", fill: ink, size: 13pt)
@@ -35,11 +37,26 @@
 #let margin = snap((board-size - clue-room - edge * cell) / 2)
 #let wall = 2.5pt
 
+#let box-edge = if puzzle.game == "sudoku" { calc.round(calc.sqrt(edge)) } else { none }
+#let regions = if "regions" in puzzle {
+  puzzle.regions
+} else if box-edge != none {
+  range(edge).map(row => range(edge).map(column =>
+    calc.quo(row, box-edge) * box-edge + calc.quo(column, box-edge)))
+} else {
+  none
+}
+#let walled(row, column, other-row, other-column) = (
+  regions != none and regions.at(row).at(column) != regions.at(other-row).at(other-column)
+)
+
 #let colour(row, column) = {
   if puzzle.game == "three_in_a_row" {
     (line-colour, terra, sage).at(puzzle.hints.at(row).at(column))
   } else if puzzle.game == "aquarium" {
     luma(85%)
+  } else if puzzle.game == "sudoku" {
+    if calc.even(calc.quo(row, box-edge) + calc.quo(column, box-edge)) { shaded-box } else { surface }
   } else {
     // kings.rs spreads the regions evenly around the colour wheel
     let count = calc.max(..puzzle.regions.flatten()) + 1
@@ -58,18 +75,16 @@
   for row in range(edge) {
     for column in range(edge) {
       if column + 1 < edge {
-        let walled = "regions" in puzzle and puzzle.regions.at(row).at(column) != puzzle.regions.at(row).at(column + 1)
         place(dx: at(column + 1), dy: at(row), line(
           angle: 90deg,
           length: cell,
-          stroke: if walled { wall + bg } else { 0.5pt + bg.transparentize(65%) },
+          stroke: if walled(row, column, row, column + 1) { wall + bg } else { 0.5pt + bg.transparentize(65%) },
         ))
       }
       if row + 1 < edge {
-        let walled = "regions" in puzzle and puzzle.regions.at(row).at(column) != puzzle.regions.at(row + 1).at(column)
         place(dx: at(column), dy: at(row + 1), line(
           length: cell,
-          stroke: if walled { wall + bg } else { 0.5pt + bg.transparentize(65%) },
+          stroke: if walled(row, column, row + 1, column) { wall + bg } else { 0.5pt + bg.transparentize(65%) },
         ))
       }
     }
@@ -82,6 +97,16 @@
     }
     for (row, clue) in puzzle.rowClues.enumerate() {
       place(dx: 0pt, dy: at(row), box(width: clue-room, height: cell, align(center + horizon, str(clue))))
+    }
+  }
+  if puzzle.game == "sudoku" {
+    set text(font: "Silkscreen", weight: "bold", size: cell * 0.55, top-edge: "bounds", bottom-edge: "bounds")
+    for (row, digits) in puzzle.givens.enumerate() {
+      for (column, digit) in digits.enumerate() {
+        if digit != 0 {
+          place(dx: at(column), dy: at(row), box(width: cell, height: cell, align(center + horizon, str(digit))))
+        }
+      }
     }
   }
 })

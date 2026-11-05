@@ -13,6 +13,7 @@ export const PALETTE = {
   sage: "#93a373",
   water: "#5b93a3",
   cream: "#e8dcc8",
+  shadedBox: "#332b24",
 };
 
 /** How each game is introduced in the app's menu */
@@ -20,6 +21,7 @@ export const GAMES = {
   three_in_a_row: { name: "Three in a Row", tagline: "Two is company, three is a crowd" },
   kings: { name: "Kings", tagline: "Crown one king per row, column and region" },
   aquarium: { name: "Aquarium", tagline: "Fill tanks until every water count is met" },
+  sudoku: { name: "Sudoku", tagline: "Every digit once per row, column and box" },
 };
 
 const CELL = 40;
@@ -47,7 +49,11 @@ export function puzzleSvg(puzzle: SharedPuzzle): string {
   // Thin lines between all cells, thick ones where regions meet
   const thin: string[] = [];
   const thick: string[] = [];
-  const regions = "regions" in puzzle ? puzzle.regions : undefined;
+  const regions = "regions" in puzzle
+    ? puzzle.regions
+    : puzzle.game === "sudoku"
+    ? sudokuBoxes(puzzle.edge)
+    : undefined;
   for (let row = 0; row < puzzle.edge; row++) {
     for (let column = 0; column < puzzle.edge; column++) {
       if (column + 1 < puzzle.edge) {
@@ -75,6 +81,20 @@ export function puzzleSvg(puzzle: SharedPuzzle): string {
     puzzle.rowClues.forEach((value, row) => parts.push(clue(CLUES / 2, at(row) + CELL / 2, value)));
   }
 
+  if (puzzle.game === "sudoku") {
+    puzzle.givens.forEach((digits, row) =>
+      digits.forEach((digit, column) => {
+        if (digit !== 0) {
+          parts.push(
+            `<text x="${at(column) + CELL / 2}" y="${
+              at(row) + CELL / 2
+            }" fill="${PALETTE.ink}" font-family="Silkscreen, monospace" font-weight="bold" font-size="22" text-anchor="middle" dominant-baseline="central">${digit}</text>`,
+          );
+        }
+      })
+    );
+  }
+
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" role="img" aria-label="The puzzle's starting position">${
     parts.join("")
   }</svg>`;
@@ -91,5 +111,17 @@ function cellColour(puzzle: SharedPuzzle, row: number, column: number): string {
       const count = Math.max(...puzzle.regions.flat()) + 1;
       return `hsl(${(puzzle.regions[row][column] / count) * 360} 60% 75%)`;
     }
+    case "sudoku": {
+      const box = Math.sqrt(puzzle.edge);
+      const shaded = (Math.floor(row / box) + Math.floor(column / box)) % 2 === 0;
+      return shaded ? PALETTE.shadedBox : PALETTE.surface;
+    }
   }
+}
+
+function sudokuBoxes(edge: number): number[][] {
+  const box = Math.sqrt(edge);
+  return Array.from({ length: edge }, (_, row) =>
+    Array.from({ length: edge }, (_, column) =>
+      Math.floor(row / box) * box + Math.floor(column / box)));
 }

@@ -7,7 +7,7 @@
 // reads as a code from a newer app. `fixtures.json` holds codes the app wrote together with what they have to read back
 // as; regenerate it with `cargo run --example share_link -p brain_games_lib -- --fixtures`.
 
-export type Game = "three_in_a_row" | "kings" | "aquarium";
+export type Game = "three_in_a_row" | "kings" | "aquarium" | "sudoku";
 
 export type SharedPuzzle =
   | {
@@ -30,6 +30,11 @@ export type SharedPuzzle =
     rowClues: number[];
     /** How many cells of each column hold water, left to right */
     columnClues: number[];
+  }
+  | {
+    game: "sudoku";
+    edge: number;
+    givens: number[][];
   };
 
 /** Why a code could not be read. The messages are the app's, aimed at a player. */
@@ -48,9 +53,16 @@ const READABLE_VERSIONS = [1];
 const THREE_IN_A_ROW_EDGES = [8, 10, 12, 14];
 const KINGS_EDGES = [6, 8, 10, 11, 12];
 const AQUARIUM_EDGES = [6, 8, 10, 12];
+const SUDOKU_EDGES = [9];
 const CLUE_BITS = 4;
+const DIGIT_BITS = 4;
 
-const GAME_TAGS: Record<number, Game> = { 1: "three_in_a_row", 2: "kings", 3: "aquarium" };
+const GAME_TAGS: Record<number, Game> = {
+  1: "three_in_a_row",
+  2: "kings",
+  3: "aquarium",
+  4: "sudoku",
+};
 
 export function readCode(code: string): SharedPuzzle {
   const bytes = decodeBase64url(code);
@@ -81,6 +93,8 @@ export function readCode(code: string): SharedPuzzle {
       return readKings(reader);
     case "aquarium":
       return readAquarium(reader);
+    case "sudoku":
+      return readSudoku(reader);
   }
 }
 
@@ -127,6 +141,25 @@ function readAquarium(reader: BitReader): SharedPuzzle {
   const columnClues = clues();
   reader.expectEnd();
   return { game: "aquarium", edge, regions, rowClues, columnClues };
+}
+
+function readSudoku(reader: BitReader): SharedPuzzle {
+  const edge = readEdge(reader, SUDOKU_EDGES);
+  const given = grid(edge, () => reader.read(1));
+  const givens = given.map((row) =>
+    row.map((isGiven) => {
+      if (isGiven === 0) {
+        return 0;
+      }
+      const digit = reader.read(DIGIT_BITS);
+      if (digit < 1 || digit > 9) {
+        throw new CodeError(`${digit} is not a value a cell can hold`);
+      }
+      return digit;
+    })
+  );
+  reader.expectEnd();
+  return { game: "sudoku", edge, givens };
 }
 
 /**

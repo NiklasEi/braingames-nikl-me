@@ -25,6 +25,11 @@ pub enum SharedPuzzle {
         #[serde(rename = "columnClues")]
         column_clues: Vec<u32>,
     },
+    Sudoku {
+        edge: usize,
+        /// 0 for an empty cell, any other digit one the puzzle gives
+        givens: Vec<Vec<u32>>,
+    },
 }
 
 /// Why a code could not be read. Every such code gets a 404, so the reason is only logged.
@@ -35,7 +40,9 @@ const READABLE_VERSIONS: [u8; 1] = [1];
 const THREE_IN_A_ROW_EDGES: [usize; 4] = [8, 10, 12, 14];
 const KINGS_EDGES: [usize; 5] = [6, 8, 10, 11, 12];
 const AQUARIUM_EDGES: [usize; 4] = [6, 8, 10, 12];
+const SUDOKU_EDGES: [usize; 1] = [9];
 const CLUE_BITS: u32 = 4;
+const DIGIT_BITS: u32 = 4;
 
 fn error<T>(message: impl Into<String>) -> Result<T, CodeError> {
     Err(CodeError(message.into()))
@@ -54,13 +61,16 @@ pub fn read_code(code: &str) -> Result<SharedPuzzle, CodeError> {
 
     let version = body[0] >> 4;
     if !READABLE_VERSIONS.contains(&version) {
-        return error(format!("puzzle codes of version {version} need a newer version of the app"));
+        return error(format!(
+            "puzzle codes of version {version} need a newer version of the app"
+        ));
     }
     let mut reader = BitReader::new(&body[1..]);
     match body[0] & 0b1111 {
         1 => read_three_in_a_row(&mut reader),
         2 => read_kings(&mut reader),
         3 => read_aquarium(&mut reader),
+        4 => read_sudoku(&mut reader),
         _ => error("the game this puzzle belongs to needs a newer version of the app"),
     }
 }
@@ -68,7 +78,9 @@ pub fn read_code(code: &str) -> Result<SharedPuzzle, CodeError> {
 fn read_edge(reader: &mut BitReader, edges: &[usize]) -> Result<usize, CodeError> {
     let edge = reader.read(8)? as usize;
     if !edges.contains(&edge) {
-        return error(format!("boards of {edge} cells need a newer version of the app"));
+        return error(format!(
+            "boards of {edge} cells need a newer version of the app"
+        ));
     }
     Ok(edge)
 }
@@ -116,6 +128,29 @@ fn read_aquarium(reader: &mut BitReader) -> Result<SharedPuzzle, CodeError> {
         row_clues,
         column_clues,
     })
+}
+
+fn read_sudoku(reader: &mut BitReader) -> Result<SharedPuzzle, CodeError> {
+    let edge = read_edge(reader, &SUDOKU_EDGES)?;
+    let given = grid(edge, || reader.read(1))?;
+    let givens = given
+        .into_iter()
+        .map(|row| {
+            row.into_iter()
+                .map(|is_given| {
+                    if is_given == 0 {
+                        return Ok(0);
+                    }
+                    match reader.read(DIGIT_BITS)? {
+                        digit @ 1..=9 => Ok(digit),
+                        value => error(format!("{value} is not a value a cell can hold")),
+                    }
+                })
+                .collect()
+        })
+        .collect::<Result<Vec<Vec<u32>>, CodeError>>()?;
+    reader.expect_end()?;
+    Ok(SharedPuzzle::Sudoku { edge, givens })
 }
 
 /// A region layout travels as its walls: first one bit for every pair of horizontal
@@ -170,7 +205,11 @@ fn read_regions(reader: &mut BitReader, edge: usize) -> Result<Vec<Vec<u32>>, Co
     }
     Ok(regions
         .into_iter()
-        .map(|row| row.into_iter().map(|region| region.unwrap_or_default()).collect())
+        .map(|row| {
+            row.into_iter()
+                .map(|region| region.unwrap_or_default())
+                .collect()
+        })
         .collect())
 }
 

@@ -29,6 +29,7 @@ fn game(puzzle: &SharedPuzzle) -> (&'static str, &'static str) {
         SharedPuzzle::ThreeInARow { .. } => ("Three in a Row", "Two is company, three is a crowd"),
         SharedPuzzle::Kings { .. } => ("Kings", "Crown one king per row, column and region"),
         SharedPuzzle::Aquarium { .. } => ("Aquarium", "Fill tanks until every water count is met"),
+        SharedPuzzle::Sudoku { .. } => ("Sudoku", "Every digit once per row, column and box"),
     }
 }
 
