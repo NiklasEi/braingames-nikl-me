@@ -100,7 +100,7 @@
     }
   }
   if puzzle.game == "sudoku" {
-    set text(font: "Silkscreen", weight: "bold", size: cell * 0.55, top-edge: "bounds", bottom-edge: "bounds")
+    set text(font: "Silkscreen", size: cell * 0.55, top-edge: "bounds", bottom-edge: "bounds")
     for (row, digits) in puzzle.givens.enumerate() {
       for (column, digit) in digits.enumerate() {
         if digit != 0 {

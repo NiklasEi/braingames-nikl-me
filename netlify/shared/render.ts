@@ -88,7 +88,7 @@ export function puzzleSvg(puzzle: SharedPuzzle): string {
           parts.push(
             `<text x="${at(column) + CELL / 2}" y="${
               at(row) + CELL / 2
-            }" fill="${PALETTE.ink}" font-family="Silkscreen, monospace" font-weight="bold" font-size="22" text-anchor="middle" dominant-baseline="central">${digit}</text>`,
+            }" fill="${PALETTE.ink}" font-family="Silkscreen, monospace" font-size="22" text-anchor="middle" dominant-baseline="central">${digit}</text>`,
           );
         }
       })
